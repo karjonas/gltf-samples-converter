@@ -297,7 +297,8 @@ if __name__ == '__main__':
         cmds = []
         for model in models:
             output_path = args.output + os.path.sep + model + os.path.sep
-            cmd = [args.balsam, "-o", output_path, models[model]]
+            cmd = [args.balsam, "--lightmapBaseResolution", "256", "--generateLightmapUV", "-o", output_path, models[model]]
+            print(cmd)
             cmds.append(cmd)
         Pool().map(run_command, cmds)
 
