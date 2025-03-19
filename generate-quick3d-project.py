@@ -6,6 +6,7 @@ from argparse import ArgumentParser
 import xml.etree.cElementTree as ET
 import json
 from multiprocessing import Pool
+import re
 
 #./generate-quick3d-project.py -o Q:\Code\temp -b Q:\Code\qt5-5.15-msvc2019\qtbase\bin\balsam.exe -i 2.0
 
@@ -256,6 +257,60 @@ def populate_blacklist():
     f.close()
     return blacklist
 
+def append_root_properties(buf):
+    find = "id: node"
+    root_properties =\
+    "\n\n\tproperty bool bakingEnabled: true\n\
+    property int lightmapBaseResolution: 256"
+    
+    return buf.replace(find, find + root_properties, 1)
+
+def append_baked_lightmap(buf):
+    find = "Model {"
+    model_lightmap_template = (
+        "usedInBakedLighting: node.bakingEnabled\n"
+        "lightmapBaseResolution: node.lightmapBaseResolution\n"
+        "bakedLightmap: BakedLightmap {\n"
+        "\tenabled: node.bakingEnabled\n"
+        "\tkey: \"$\"\n"
+        "\tloadPrefix: \"file:\"\n"
+        "}"
+    )
+
+    updated_buf = []
+    lines = buf.splitlines()
+
+    for i, line in enumerate(lines):
+        updated_buf.append(line)
+
+        # Find all lines starting with 'Model {', extract ID and append the template updated with key: ID
+        if line.strip().startswith(find):
+            if i + 1 < len(lines):
+                match = re.match(r"(\s*)id:\s*([\w\d_]+)", lines[i + 1])  
+                if match:
+                    indentation = match.group(1)
+                    model_id = match.group(2)
+                    indented_lightmap_properties = "\n".join(
+                        indentation + line for line in model_lightmap_template.splitlines()
+                    )
+                    lightmap_properties = indented_lightmap_properties.replace("$", model_id)
+                    updated_buf.append(lightmap_properties)
+
+    return "\n".join(updated_buf)
+
+# Modifies all tests to include root properties for lightmap baking and bakedLightmap property to each Model
+def add_lightmap_baking_properties(tests):
+    for model in tests:
+        file = args.output + os.path.sep + tests[model]
+        with open(file, "r+", encoding="utf-8") as f:
+            buf = f.read()
+            buf = append_root_properties(buf)
+            buf = append_baked_lightmap(buf)
+            f.seek(0)
+            f.write(buf)
+            f.truncate()
+
+
 # Run a command and print stderr on error (non-zero return value)
 def run_command(cmd):
     result = subprocess.run(cmd, capture_output=True)
@@ -307,6 +362,9 @@ if __name__ == '__main__':
         generate_test_model(args.output, tests)
         generate_qrc_files(args.output, blacklist)
         generate_ios_bundle_data(args.output, blacklist)
+
+        add_lightmap_baking_properties(tests)
+            
     else:
         # Generate Lancelot project instead
         # Copy lancelot project template
