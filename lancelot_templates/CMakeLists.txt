@@ -1,2 +1,0 @@
-add_subdirectory(scenegrabber)
-add_subdirectory(lancelot_gltf2samples)

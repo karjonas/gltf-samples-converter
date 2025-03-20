@@ -10,53 +10,18 @@ import re
 
 #./generate-quick3d-project.py -o Q:\Code\temp -b Q:\Code\qt5-5.15-msvc2019\qtbase\bin\balsam.exe -i 2.0
 
-def generate_ios_bundle_data(output_dir, blacklist):
-    original_dir = os.getcwd()
-    os.chdir(output_dir)
-
-    # Open the .pro file to append the build_data commands
-    f = open("gltf2TestViewer.pro", "a", encoding='utf-8')
-    f.write("ios {\n")
-    f.write("\tios_models.files = ")
-
-    # Add the viewer files
-    f.write("\\\n\t\t$$PWD/GltfTestViewer.qml ")
-    f.write("\\\n\t\t$$PWD/GltfTestsModel.qml ")
-    f.write("\\\n\t\t$$PWD/environment.hdr ")
-
-    # Get a list of all resources that need to by copied into the data_bundle
-    for model in sorted(os.listdir(".")):
-        # models will only be in folders
-        if not os.path.isdir(model):
-            continue
-        if model in blacklist:
-            continue
-        model = model.replace(' ', '_')
-
-        f.write("\\\n\t\t$$PWD/" + model + "/ ")
-
-    f.write("\n\tQMAKE_BUNDLE_DATA += ios_models\n")
-
-    f.write("} #ios\n")
-    f.close()
-    os.chdir(original_dir)
-
 def copy_template_files(output_dir):
-    copy2("templates/environment.hdr", output_dir)
     copy2("templates/main.cpp", output_dir)
-    copy2("templates/GltfTestViewer.qml", output_dir)
-    copy2("templates/gltf2TestViewer.pro", output_dir)
-    copy2("templates/viewer.qrc", output_dir)
-
-def copy_lancelot_template_files(output_dir):
-    copytree(os.getcwd() + os.path.sep + "lancelot_templates", output_dir, dirs_exist_ok=True)
-    copy2("templates/environment.hdr", output_dir + os.path.sep + "data")
+    copy2("templates/main.qml", output_dir)
+    copy2("templates/lightBaking.pro", output_dir)
+    copy2("templates/lightBaking.qrc", output_dir)
+    copy2("templates/config.json", output_dir)
 
 def generate_qrc_files(output_dir, blacklist):
     original_dir = os.getcwd()
     os.chdir(output_dir)
 
-    qrcList = ["viewer.qrc"]
+    qrcList = ["lightBaking.qrc"]
     # for each folder, generate a qrc file for all the files in the subtree
     for model in sorted(os.listdir(".")):
         # models will only be in folders
@@ -89,7 +54,7 @@ def generate_qrc_files(output_dir, blacklist):
         os.chdir("..")
 
     # append the QRC file to the .pro file
-    f = open("gltf2TestViewer.pro", "a", encoding='utf-8')
+    f = open("lightBaking.pro", "a", encoding='utf-8')
     f.write("!ios {\n")
 
     if len(qrcList) > 0:
@@ -152,101 +117,6 @@ def generate_test_list(output_dir, blacklist):
     os.chdir(original_dir)
     return tests
 
-def generate_test_model(output_dir, tests):
-    original_dir = os.getcwd()
-    os.chdir(output_dir)
-    f = open("GltfTestsModel.qml", "w", encoding='utf-8')
-    f.write("import QtQuick\n")
-    f.write("import QtQml.Models\n\n")
-
-    for test in tests:
-        f.write("import \"" + test + "\"\n")
-
-    f.write("ListModel {\n")
-    for test in tests:
-        f.write("\tListElement {\n")
-        f.write("\t\tname: \"" + test + "\"\n")
-        f.write("\t\tsource: \"" + tests[test] + "\"\n")
-        f.write("\t}\n")
-    f.write("}\n") #ListModel
-
-    f.close()
-    os.chdir(original_dir)
-
-def generate_lancelot_tests(output_dir, tests):
-    # load the template file
-    templateFile = open("templates/LancelotView.qml", "r", encoding='utf-8')
-    templateString = templateFile.read()
-    templateFile.close()
-
-    # Load settings file
-    settingsFile = open("lancelot_settings.json", "r", encoding='utf-8')
-    settings = json.loads(settingsFile.read())
-    settingsFile.close()
-
-    original_dir = os.getcwd()
-    os.chdir(output_dir)
-
-    ignoreFile = open("Ignore", "a", encoding='utf-8')
-    for test in tests:
-        # Maintain the Ignore file
-        ignoreFile.write(tests[test] + "\n")
-        # Generate the test case
-        localTemplate = templateString
-
-        # get file name
-        componentName = tests[test].split("/")[-1:][0]
-
-        scale = 1
-        yPos = 0
-        xPos = 0
-        isAnimated = False
-        if test in settings:
-            scale = settings[test].get('scale', 1)
-            xPos = settings[test].get('x', 0)
-            yPos = settings[test].get('y', 0)
-            isAnimated = settings[test].get('animated', False)
-
-        if isAnimated:
-            # need to modify the original file to not animate during the test
-            # replace "running: true" with "running: false" which should
-            # work because the only instances of this in generate files are for
-            # timeline animations
-            originalFile = open(tests[test], "r", encoding='utf-8')
-            contents = originalFile.read()
-            originalFile.close()
-            contents = contents.replace("running: true", "running: false")
-            contents = contents.replace("currentFrame: 0", "currentFrame: 500")
-            originalFile = open(tests[test], "w", encoding='utf-8')
-            originalFile.write(contents)
-            originalFile.close()
-
-        # source file (same folder)
-        localTemplate = localTemplate.replace("###", "\"" + componentName + "\"")
-
-        # scale (settings file)
-        localTemplate = localTemplate.replace("@@@", "Qt.vector3d(" + str(scale) + ", " + str(scale) + ", " + str(scale) + ")")
-
-        # x,y position (settings file)
-        localTemplate = localTemplate.replace("$x$", str(xPos))
-        localTemplate = localTemplate.replace("$y$", str(yPos))
-
-        # write test file
-        componentName = componentName.replace(".qml", "")
-        testFileName = componentName + "Test.qml"
-        os.chdir(test)
-        f = open(testFileName, "w", encoding='utf-8')
-        f.write(localTemplate)
-        f.close()
-        os.chdir("..")
-
-        if not test in settings:
-            print(f"Settings for {test} not found, will be ignored".encode('utf-8'))
-            ignoreFile.write(test + "/" + testFileName + "\n")
-
-    ignoreFile.close()
-    os.chdir(original_dir)
-
 def populate_blacklist():
     blacklist = []
     f = open("blacklist.txt", "r", encoding='utf-8')
@@ -265,7 +135,7 @@ def append_root_properties(buf):
     
     return buf.replace(find, find + root_properties, 1)
 
-def append_baked_lightmap(buf):
+def append_baked_lightmap(model_name, buf):
     find = "Model {"
     model_lightmap_template = (
         "usedInBakedLighting: node.bakingEnabled\n"
@@ -293,23 +163,22 @@ def append_baked_lightmap(buf):
                     indented_lightmap_properties = "\n".join(
                         indentation + line for line in model_lightmap_template.splitlines()
                     )
-                    lightmap_properties = indented_lightmap_properties.replace("$", model_id)
+                    lightmap_properties = indented_lightmap_properties.replace("$", f"{model_name}_{model_id}")
                     updated_buf.append(lightmap_properties)
 
     return "\n".join(updated_buf)
 
 # Modifies all tests to include root properties for lightmap baking and bakedLightmap property to each Model
-def add_lightmap_baking_properties(tests):
+def add_lightmap_baking_properties(output, tests):
     for model in tests:
-        file = args.output + os.path.sep + tests[model]
+        file = output + os.path.sep + tests[model]
         with open(file, "r+", encoding="utf-8") as f:
             buf = f.read()
             buf = append_root_properties(buf)
-            buf = append_baked_lightmap(buf)
+            buf = append_baked_lightmap(model, buf)
             f.seek(0)
             f.write(buf)
             f.truncate()
-
 
 # Run a command and print stderr on error (non-zero return value)
 def run_command(cmd):
@@ -332,9 +201,7 @@ if __name__ == '__main__':
                         help="Location of balsam tool", metavar="BALSAM")
     parser.add_argument("-i", "--input", dest="input",
                         help="Location of source directory", metavar="INPUT")
-    parser.add_argument("-l", "--lancelot", dest="lancelot",
-                        help="Build Lancelot tests template", action="store_const",
-                        const=True, default=False)
+
     args = parser.parse_args()
 
     blacklist = populate_blacklist()
@@ -345,42 +212,19 @@ if __name__ == '__main__':
     if not os.path.exists(args.output):
         os.makedirs(args.output)
 
-    if not args.lancelot:
-        # Generate test viewer application
-        copy_template_files(args.output)
+    copy_template_files(args.output)
 
-        cmds = []
-        for model in models:
-            output_path = args.output + os.path.sep + model + os.path.sep
-            cmd = [args.balsam, "--lightmapBaseResolution", "256", "--generateLightmapUV", "-o", output_path, models[model]]
-            print(cmd)
-            cmds.append(cmd)
-        Pool().map(run_command, cmds)
+    cmds = []
+    for model in models:
+        output_path = args.output + os.path.sep + model + os.path.sep
+        cmd = [args.balsam, "--generateLightmapUV", "-o", output_path, models[model]]
+        print(cmd)
+        cmds.append(cmd)
+    Pool().map(run_command, cmds)
 
-        # Generate QML Viewer code
-        tests = generate_test_list(args.output, blacklist)
-        generate_test_model(args.output, tests)
-        generate_qrc_files(args.output, blacklist)
-        generate_ios_bundle_data(args.output, blacklist)
+    tests = generate_test_list(args.output, blacklist)
+    generate_qrc_files(args.output, blacklist)
+    add_lightmap_baking_properties(args.output, tests)
 
-        add_lightmap_baking_properties(tests)
             
-    else:
-        # Generate Lancelot project instead
-        # Copy lancelot project template
-        copy_lancelot_template_files(args.output)
-
-        # Generate QML files for Models
-        testFolder = args.output + os.path.sep + "data" + os.path.sep
-        cmds = []
-        for model in models:
-            output_path = testFolder + model + os.path.sep
-            cmd = [args.balsam, "-o", output_path, models[model]]
-            cmds.append(cmd)
-        Pool().map(run_command, cmds)
-
-        # Generate Lancelot tests for each project
-        tests = generate_test_list(testFolder, blacklist)
-        generate_lancelot_tests(testFolder, tests)
-
     os.chdir(original_dir)

@@ -1,0 +1,18 @@
+{
+    "lmEnabled": true,
+    "lmSamples": 256,
+    "lmResolution": 256,
+    
+    "model": "SciFiHelmet",
+    "modelScaleFactor": 1,
+    "modelYPos": 0,
+
+    "lightRotationX": -135,
+    "lightRotationY": -90,
+    "lightBrightness": 5,
+
+    "SciFiHelmet": {
+        "modelScaleFactor": 50,
+        "modelYPos": 70
+    }
+}
