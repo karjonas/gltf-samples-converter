@@ -17,7 +17,7 @@ def copy_template_files(output_dir):
     copy2("templates/lightBaking.qrc", output_dir)
     copy2("templates/config.json", output_dir)
 
-def generate_qrc_files(output_dir, blacklist):
+def generate_qrc_files(output_dir):
     original_dir = os.getcwd()
     os.chdir(output_dir)
 
@@ -26,8 +26,6 @@ def generate_qrc_files(output_dir, blacklist):
     for model in sorted(os.listdir(".")):
         # models will only be in folders
         if not os.path.isdir(model):
-            continue
-        if model in blacklist:
             continue
 
         os.chdir(model)
@@ -97,14 +95,12 @@ def generate_tests(directory, blacklist):
     os.chdir(original_dir)
     return models
 
-def generate_test_list(output_dir, blacklist):
+def generate_test_list(output_dir):
     original_dir = os.getcwd()
     os.chdir(output_dir)
     tests = {}
     for test in sorted(os.listdir(".")):
         if not os.path.isdir(test):
-            continue
-        if test in blacklist:
             continue
         os.chdir(test)
         # Get the component name
@@ -127,11 +123,15 @@ def populate_blacklist():
     f.close()
     return blacklist
 
-def append_root_properties(buf):
+def append_root_properties(model_name, buf):
     find = "id: node"
     root_properties =\
     "\n\n\tproperty bool bakingEnabled: true\n\
     property int lightmapBaseResolution: 256"
+
+    if not find in buf:
+        print(f"Could not find root node identifier '{find}' in {model_name}.")
+        return buf
     
     return buf.replace(find, find + root_properties, 1)
 
@@ -149,12 +149,15 @@ def append_baked_lightmap(model_name, buf):
 
     updated_buf = []
     lines = buf.splitlines()
+    models_found = 0
+    models_patched = 0
 
     for i, line in enumerate(lines):
         updated_buf.append(line)
 
         # Find all lines starting with 'Model {', extract ID and append the template updated with key: ID
         if line.strip().startswith(find):
+            models_found += 1
             if i + 1 < len(lines):
                 match = re.match(r"(\s*)id:\s*([\w\d_]+)", lines[i + 1])  
                 if match:
@@ -165,7 +168,13 @@ def append_baked_lightmap(model_name, buf):
                     )
                     lightmap_properties = indented_lightmap_properties.replace("$", f"{model_name}_{model_id}")
                     updated_buf.append(lightmap_properties)
+                    models_patched += 1
+                else:
+                     print(f"No 'id:' found for {model_name}.")
 
+    if (models_patched != models_found):
+        print(f"Failed to patch all models in {model_name}: Managed {models_patched}/{models_found}.")
+    
     return "\n".join(updated_buf)
 
 # Modifies all tests to include root properties for lightmap baking and bakedLightmap property to each Model
@@ -174,7 +183,7 @@ def add_lightmap_baking_properties(output, tests):
         file = output + os.path.sep + tests[model]
         with open(file, "r+", encoding="utf-8") as f:
             buf = f.read()
-            buf = append_root_properties(buf)
+            buf = append_root_properties(model, buf)
             buf = append_baked_lightmap(model, buf)
             f.seek(0)
             f.write(buf)
@@ -207,6 +216,7 @@ if __name__ == '__main__':
     blacklist = populate_blacklist()
     # Generate QML from GLTF2 files
     models = generate_tests(args.input, blacklist)
+    print(f"Found {len(models)} eligible model files")
 
     # create output folder if it doesn't exist
     if not os.path.exists(args.output):
@@ -215,16 +225,19 @@ if __name__ == '__main__':
     copy_template_files(args.output)
 
     cmds = []
+    print("Running balsam on models...")
     for model in models:
         output_path = args.output + os.path.sep + model + os.path.sep
         cmd = [args.balsam, "--generateLightmapUV", "-o", output_path, models[model]]
-        print(cmd)
         cmds.append(cmd)
     Pool().map(run_command, cmds)
-
-    tests = generate_test_list(args.output, blacklist)
-    generate_qrc_files(args.output, blacklist)
+    
+    tests = generate_test_list(args.output)
+    print(f"Balsam successfully generated {len(tests)}/{len(models)} files")
+    generate_qrc_files(args.output)
+    
+    print("Patching baking properties...")
     add_lightmap_baking_properties(args.output, tests)
 
-            
     os.chdir(original_dir)
+    print("Done")

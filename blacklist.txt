@@ -4,3 +4,4 @@ GearboxAssy
 MorphPrimitivesTest
 MorphStressTest
 Box With Spaces
+Unicode❤♻Test
