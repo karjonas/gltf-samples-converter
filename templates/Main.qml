@@ -205,7 +205,7 @@ Window {
                             id: resolutionSlider
                             value: configData.lmResolution
                             from: 0
-                            to: 2048
+                            to: 16384
                             onValueChanged: configData.lmResolution = value
                         }
 
