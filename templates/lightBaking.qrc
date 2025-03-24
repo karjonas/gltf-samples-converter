@@ -1,7 +1,0 @@
-<RCC>
-    <qresource prefix="/">
-        <file>main.cpp</file>
-        <file>Main.qml</file>
-        <file>config.json</file>
-    </qresource>
-</RCC>

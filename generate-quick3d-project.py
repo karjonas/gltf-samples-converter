@@ -1,71 +1,18 @@
 #!/usr/bin/env python
+from pathlib import Path
 import subprocess
 import os
-from shutil import copy2, copytree
+from shutil import copy2
 from argparse import ArgumentParser
-import xml.etree.cElementTree as ET
-import json
 from multiprocessing import Pool
 import re
 
 #./generate-quick3d-project.py -o Q:\Code\temp -b Q:\Code\qt5-5.15-msvc2019\qtbase\bin\balsam.exe -i 2.0
 
 def copy_template_files(output_dir):
-    copy2("templates/main.cpp", output_dir)
     copy2("templates/main.qml", output_dir)
-    copy2("templates/lightBaking.pro", output_dir)
-    copy2("templates/lightBaking.qrc", output_dir)
     copy2("templates/config.json", output_dir)
-
-def generate_qrc_files(output_dir):
-    original_dir = os.getcwd()
-    os.chdir(output_dir)
-
-    qrcList = ["lightBaking.qrc"]
-    # for each folder, generate a qrc file for all the files in the subtree
-    for model in sorted(os.listdir(".")):
-        # models will only be in folders
-        if not os.path.isdir(model):
-            continue
-
-        os.chdir(model)
-        qrcRoot = ET.Element("RCC")
-        qrcResource = ET.SubElement(qrcRoot, "qresource", prefix="/" + model)
-
-        componentName = ""
-        for resource in sorted(os.listdir(".")):
-            if not os.path.isdir(resource):
-                if resource.endswith(".qrc"):
-                    continue
-                ET.SubElement(qrcResource, "file").text = resource
-                # this is the QML file, which is the name for the qrc file as well
-                componentName = resource.replace(".qml", "")
-            else:
-                os.chdir(resource)
-                for subResource in sorted(os.listdir(".")):
-                    ET.SubElement(qrcResource, "file").text = resource + "/" + subResource
-                os.chdir("..")
-        
-        tree = ET.ElementTree(qrcRoot)
-        tree.write(componentName + ".qrc", encoding="utf-8", xml_declaration=True)
-        qrcList.append(model + "/" + componentName + ".qrc")
-        os.chdir("..")
-
-    # append the QRC file to the .pro file
-    f = open("lightBaking.pro", "a", encoding='utf-8')
-    f.write("!ios {\n")
-
-    if len(qrcList) > 0:
-        f.write("\tRESOURCES += \\\n")
-
-    for qrc in qrcList:
-        if ' ' in qrc:
-            qrc = '"' + qrc + '"' 
-        f.write("\t\t" + qrc + " \\\n")
-    f.write("} #!ios\n")
-    f.close()
-
-    os.chdir(original_dir)
+    copy2("templates/lightgen.py", output_dir)
 
 def generate_tests(directory, blacklist):
     original_dir = os.getcwd()
@@ -91,26 +38,28 @@ def generate_tests(directory, blacklist):
             os.chdir("..")
             break # only handle the first found
         os.chdir("..")
-
     os.chdir(original_dir)
     return models
 
 def generate_test_list(output_dir):
-    original_dir = os.getcwd()
-    os.chdir(output_dir)
     tests = {}
-    for test in sorted(os.listdir(".")):
-        if not os.path.isdir(test):
-            continue
-        os.chdir(test)
-        # Get the component name
-        components = [f for f in os.listdir(".")
-                      if f.endswith(".qml")]
-        if not components:
-            continue
-        tests[test] = test + "/" + components[0]
-        os.chdir("..")
-    os.chdir(original_dir)
+    for test in Path(output_dir).iterdir():
+        if test.is_dir():
+            components = list(test.rglob('*.qml'))
+            if len(components) == 1:
+                file = components[0]
+                wanted_name = f"{test.name}.qml"
+                # Make sure the qml file is named the same as the folder.
+                # This is the case 95% of the time, so let's make it 100%.
+                # Makes it easier handling the loading of the models in lightgen.py.
+                if file.name != wanted_name:
+                    print(f"Renaming: {file.name} -> {wanted_name}")
+                    file = file.rename(file.with_name(wanted_name))
+                tests[test.name] = str(file.resolve())
+            elif len(components) == 0:
+                print(f"Error: No .qml file found in {test}")
+            else:
+                print(f"Error: Multiple .qml files found in {test}")
     return tests
 
 def populate_blacklist():
@@ -155,7 +104,7 @@ def append_baked_lightmap(model_name, buf):
     for i, line in enumerate(lines):
         updated_buf.append(line)
 
-        # Find all lines starting with 'Model {', extract ID and append the template updated with key: ID
+        # Find all lines starting with 'Model {', extract ID (regex) and append the template updated with key: ID
         if line.strip().startswith(find):
             models_found += 1
             if i + 1 < len(lines):
@@ -178,9 +127,9 @@ def append_baked_lightmap(model_name, buf):
     return "\n".join(updated_buf)
 
 # Modifies all tests to include root properties for lightmap baking and bakedLightmap property to each Model
-def add_lightmap_baking_properties(output, tests):
+def add_lightmap_baking_properties(tests):
     for model in tests:
-        file = output + os.path.sep + tests[model]
+        file = tests[model]
         with open(file, "r+", encoding="utf-8") as f:
             buf = f.read()
             buf = append_root_properties(model, buf)
@@ -210,7 +159,6 @@ if __name__ == '__main__':
                         help="Location of balsam tool", metavar="BALSAM")
     parser.add_argument("-i", "--input", dest="input",
                         help="Location of source directory", metavar="INPUT")
-
     args = parser.parse_args()
 
     blacklist = populate_blacklist()
@@ -221,23 +169,29 @@ if __name__ == '__main__':
     # create output folder if it doesn't exist
     if not os.path.exists(args.output):
         os.makedirs(args.output)
-
     copy_template_files(args.output)
 
     cmds = []
     print("Running balsam on models...")
+    generated_folder = args.output + os.path.sep + "balsam_generated"
     for model in models:
-        output_path = args.output + os.path.sep + model + os.path.sep
+        output_path = generated_folder + os.path.sep + model + os.path.sep
         cmd = [args.balsam, "--generateLightmapUV", "-o", output_path, models[model]]
         cmds.append(cmd)
-    Pool().map(run_command, cmds)
+
+    total = len(cmds)
+    completed = 0
+
+    with Pool() as pool:
+        for _ in pool.imap_unordered(run_command, cmds):
+            completed += 1
+            print(f"Processed {completed}/{total}")
     
-    tests = generate_test_list(args.output)
-    print(f"Balsam successfully generated {len(tests)}/{len(models)} files")
-    generate_qrc_files(args.output)
+    tests = generate_test_list(generated_folder)
+    print(f"Balsam successfully generated {len(tests)}/{len(models)} models")
     
     print("Patching baking properties...")
-    add_lightmap_baking_properties(args.output, tests)
+    add_lightmap_baking_properties(tests)
 
     os.chdir(original_dir)
     print("Done")
