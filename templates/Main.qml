@@ -50,7 +50,7 @@ Window {
          function loadConfig() {
              let configPath = getConfigPath()
              if (!configPath) {
-                 console.warn("No --configFile=path/to/config.json argument provided");
+                 console.warn("No -- path/to/config.json argument provided");
                  return;
              }
 
