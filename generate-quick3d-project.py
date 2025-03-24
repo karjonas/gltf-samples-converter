@@ -10,7 +10,7 @@ import re
 #./generate-quick3d-project.py -o Q:\Code\temp -b Q:\Code\qt5-5.15-msvc2019\qtbase\bin\balsam.exe -i 2.0
 
 def copy_template_files(output_dir):
-    copy2("templates/main.qml", output_dir)
+    copy2("templates/Main.qml", output_dir)
     copy2("templates/config.json", output_dir)
     copy2("templates/lightgen.py", output_dir)
 

@@ -149,7 +149,7 @@ if __name__ == '__main__':
         config_data = load_config(args.config, final_models[model], cmd_overrides)
         tmp_file_path = write_temp_config(config_data)
         tmp_file_url = Path(tmp_file_path).as_uri()
-        cmd = [args.qml, "main.qml", "--", tmp_file_url]
+        cmd = [args.qml, "Main.qml", "--", tmp_file_url]
         if args.bake:
             cmd.append("--bake-lightmaps")
         
