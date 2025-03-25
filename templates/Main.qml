@@ -159,8 +159,8 @@ Window {
             source: configData.model
             onLoaded: {
                 if (modelLoader.item) {
-                    modelLoader.item.bakingEnabled = configData.lmEnabled;
-                    modelLoader.item.lightmapBaseResolution = configData.lmResolution;
+                    modelLoader.item.bakingEnabled = Qt.binding(function() { return configData.lmEnabled });
+                    modelLoader.item.lightmapBaseResolution = Qt.binding(function() { return configData.lmResolution });
                     modelLoader.item.position.y = configData.modelYPos;
 
                     let scaleFactor = configData.modelScaleFactor;
